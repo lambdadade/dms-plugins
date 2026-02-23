@@ -1,0 +1,17 @@
+{
+    "id": "dmsNotifForward",
+    "name": "Notification Forwarder",
+    "description": "Forward desktop notifications to external services (ntfy, pushover, etc.) via a configurable shell script. Toggle forwarding via IPC for lock/unlock hooks.",
+    "version": "1.0.0",
+    "license": "MIT",
+    "author": "lambdadade",
+    "icon": "send",
+    "type": "widget",
+    "component": "./NotifForwardWidget.qml",
+    "settings": "./NotifForwardSettings.qml",
+    "permissions": [
+        "settings_read",
+        "settings_write",
+        "process"
+    ]
+}

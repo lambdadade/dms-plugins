@@ -1,0 +1,12 @@
+{
+    "id": "polyglotSearch",
+    "name": "Polyglot Search",
+    "description": "Translate text from the spotlight launcher. Usage: >tr <lang> <text>. Uses DeepL if a key is set in Polyglot settings, otherwise Google Translate.",
+    "version": "1.0.0",
+    "author": "CNOVA",
+    "icon": "translate",
+    "type": "launcher",
+    "component": "./PolyglotSearch.qml",
+    "trigger": ">tr ",
+    "permissions": ["settings_read", "network"]
+}

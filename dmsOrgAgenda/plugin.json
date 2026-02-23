@@ -1,0 +1,17 @@
+{
+    "id": "dmsOrgAgenda",
+    "name": "Org Agenda",
+    "description": "Read-only Emacs org-mode agenda viewer with bar widget showing overdue/today count and a chronological day/week panel with event notifications.",
+    "version": "1.0.0",
+    "license": "MIT",
+    "author": "lambdadade",
+    "icon": "event",
+    "type": "widget",
+    "component": "./OrgAgendaWidget.qml",
+    "settings": "./OrgAgendaSettings.qml",
+    "permissions": [
+        "settings_read",
+        "settings_write",
+        "process"
+    ]
+}

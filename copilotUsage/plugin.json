@@ -1,0 +1,17 @@
+{
+    "id": "copilotUsage",
+    "name": "GitHub Copilot Usage",
+    "description": "Monitor your GitHub Copilot subscription plan and, if you have org admin/billing access, code completion acceptance rates and chat activity",
+    "version": "1.0.0",
+    "author": "local",
+    "icon": "smart_toy",
+    "type": "widget",
+    "capabilities": ["dankbar-widget"],
+    "component": "./CopilotUsageWidget.qml",
+    "settings": "./CopilotUsageSettings.qml",
+    "requires": ["gh", "jq"],
+    "permissions": [
+        "settings_read",
+        "settings_write"
+    ]
+}
