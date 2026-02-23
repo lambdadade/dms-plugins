@@ -18,61 +18,48 @@ PluginComponent {
     property bool forwardNormal: pluginData.forwardNormal ?? true
     property bool forwardCritical: pluginData.forwardCritical ?? true
 
-    // Track history length to detect new arrivals
-    property int lastHistoryCount: 0
-    property bool readyToForward: false
+    // Track live notification count to detect new arrivals.
+    // Uses NotificationService.notifications (live list) rather than historyList
+    // so forwarding works regardless of notification history settings.
+    property int lastNotifCount: 0
 
     Component.onCompleted: {
-        // If history is already loaded (e.g. plugin reload), initialise the
-        // baseline count so we don't forward historic notifications on startup
-        if (NotificationService.historyLoaded) {
-            lastHistoryCount = NotificationService.historyList.length
-            readyToForward = true
-        }
+        // Snapshot current count so we don't forward existing notifications on startup
+        lastNotifCount = NotificationService.notifications.length
     }
 
     Connections {
         target: NotificationService
 
-        function onHistoryLoadedChanged() {
-            // History finished loading - snapshot the current count so the
-            // next change event will only catch genuinely new notifications
-            if (NotificationService.historyLoaded && !root.readyToForward) {
-                root.lastHistoryCount = NotificationService.historyList.length
-                root.readyToForward = true
+        function onNotificationsChanged() {
+            const currentCount = NotificationService.notifications.length
+            if (currentCount > root.lastNotifCount) {
+                // New notification arrived — it's the last item in the list
+                const wrapper = NotificationService.notifications[currentCount - 1]
+                if (wrapper) root.forwardWrapper(wrapper)
             }
-        }
-
-        function onHistoryListChanged() {
-            if (!root.readyToForward) return
-            const currentCount = NotificationService.historyList.length
-            if (currentCount > root.lastHistoryCount && currentCount > 0) {
-                root.forwardNotification(NotificationService.historyList[0])
-            }
-            root.lastHistoryCount = currentCount
+            root.lastNotifCount = currentCount
         }
     }
 
-    function forwardNotification(data) {
+    function forwardWrapper(wrapper) {
         if (!root.forwardingEnabled) return
         if (!root.forwardScript) return
 
-        // Urgency: 0 = low, 1 = normal, 2 = critical (NotificationUrgency enum values)
-        const urgency = typeof data.urgency === "number" ? data.urgency : 1
+        // Urgency: 0 = low, 1 = normal, 2 = critical
+        const urgency = typeof wrapper.urgency === "number" ? wrapper.urgency : 1
         if (urgency === 0 && !root.forwardLow) return
         if (urgency === 1 && !root.forwardNormal) return
         if (urgency === 2 && !root.forwardCritical) return
 
         const payload = JSON.stringify({
-            summary: data.summary || "",
-            body: data.body || "",
-            appName: data.appName || "",
+            summary: wrapper.summary || "",
+            body: wrapper.body || "",
+            appName: wrapper.appName || "",
             urgency: urgency,
-            // DMS stores timestamp as milliseconds; convert to ISO string
-            timestamp: data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString()
+            timestamp: wrapper.time ? wrapper.time.toISOString() : new Date().toISOString()
         })
 
-        // Same calling convention as the noctalia version:
         // sh -lc <script> sh <json-payload>  →  payload is $1 in the script
         Quickshell.execDetached(["sh", "-lc", root.forwardScript, "sh", payload])
     }
