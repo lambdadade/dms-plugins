@@ -938,10 +938,13 @@ PluginComponent {
                                 selectedIndex = 0;
                             }
                             event.accepted = true;
-                        } else if (event.key === Qt.Key_C &&
-                                   (event.modifiers & Qt.ControlModifier)) {
-                            Quickshell.execDetached(["emacsclient", "-c",
+                        } else if (event.key === Qt.Key_N &&
+                                   searchText === "" &&
+                                   !(event.modifiers & Qt.ControlModifier) &&
+                                   !(event.modifiers & Qt.AltModifier)) {
+                            Quickshell.execDetached(["emacsclient", "-n",
                                 "--eval", "(org-capture)"]);
+                            if (popout.closePopout) popout.closePopout();
                             event.accepted = true;
                         } else if (event.text && event.text.length === 1 &&
                                    !(event.modifiers & Qt.ControlModifier) &&
