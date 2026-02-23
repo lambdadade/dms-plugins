@@ -458,6 +458,10 @@ PluginComponent {
     IpcHandler {
         target: "dmsOrgAgenda"
 
+        function openPanel() {
+            root.triggerPopout();
+        }
+
         function refreshAgenda() {
             root.refresh();
         }
@@ -566,7 +570,8 @@ PluginComponent {
                 // tab changes (key events only reach items with activeFocus).
                 onActiveTabChanged: Qt.callLater(() => {
                     if (activeTab === 0) agendaContent.forceActiveFocus();
-                    else todoContent.forceActiveFocus();
+                    else if (activeTab === 1) todoContent.forceActiveFocus();
+                    else captureContent.forceActiveFocus();
                 })
 
                 Component.onCompleted: Qt.callLater(() => agendaContent.forceActiveFocus())
@@ -578,12 +583,12 @@ PluginComponent {
                     spacing: 2
 
                     Repeater {
-                        model: ["Agenda", "Todo"]
+                        model: ["Agenda", "Todo", "Capture"]
 
                         Rectangle {
                             required property string modelData
                             required property int index
-                            width: (tabBar.width - 2) / 2
+                            width: (tabBar.width - 4) / 3
                             height: 32
                             radius: Theme.cornerRadius
                             color: panelRoot.activeTab === index
@@ -915,7 +920,7 @@ PluginComponent {
                         agendaContent.resetSelection();
                     }
                     Keys.onRightPressed: {
-                        // Already on rightmost (Todo) tab — no-op
+                        panelRoot.activeTab = 2;
                     }
                     Keys.onReturnPressed: {
                         const item = filteredTodos[selectedIndex];
@@ -937,14 +942,6 @@ PluginComponent {
                                 searchText = searchText.slice(0, -1);
                                 selectedIndex = 0;
                             }
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_N &&
-                                   searchText === "" &&
-                                   !(event.modifiers & Qt.ControlModifier) &&
-                                   !(event.modifiers & Qt.AltModifier)) {
-                            Quickshell.execDetached(["emacsclient", "-n",
-                                "--eval", "(org-capture)"]);
-                            if (popout.closePopout) popout.closePopout();
                             event.accepted = true;
                         } else if (event.text && event.text.length === 1 &&
                                    !(event.modifiers & Qt.ControlModifier) &&
@@ -1029,6 +1026,49 @@ PluginComponent {
                                         horizontalAlignment: Text.AlignHCenter
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // ── Capture tab ───────────────────────────────────────────
+                Item {
+                    id: captureContent
+                    width: parent.width
+                    height: 300
+                    visible: panelRoot.activeTab === 2
+
+                    Keys.onLeftPressed: {
+                        panelRoot.activeTab = 1;
+                    }
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: Theme.spacingL
+
+                        DankIcon {
+                            name: "add_circle"
+                            size: 48
+                            color: Theme.primary
+                            opacity: 0.8
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
+
+                        StyledText {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "Create a new org capture entry"
+                            font.pixelSize: Theme.fontSizeMedium
+                            color: Theme.surfaceVariantText
+                        }
+
+                        DankButton {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "Open org-capture"
+                            iconName: "edit_note"
+                            onClicked: {
+                                Quickshell.execDetached(["emacsclient", "-n",
+                                    "--eval", "(org-capture)"]);
+                                if (popout.closePopout) popout.closePopout();
                             }
                         }
                     }
