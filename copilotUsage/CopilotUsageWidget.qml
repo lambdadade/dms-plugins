@@ -36,6 +36,7 @@ PluginComponent {
     property bool   workError:       false
     property bool   workLoading:     false
     readonly property bool workConfigured: workGhUser !== ""
+    // workPremiumUsed when workPremiumLimit=100 represents used percentage directly
     readonly property real workPremiumPct: workPremiumLimit > 0
         ? Math.min(workPremiumUsed * 100 / workPremiumLimit, 100)
         : 0
@@ -67,7 +68,7 @@ PluginComponent {
     }
 
     readonly property real maxDaily: Math.max.apply(null, dailyEvents) || 1
-    property string scriptPath: PluginService.pluginDirectory + "/copilotUsage/get-copilot-usage"
+    property string scriptPath: PluginService.pluginDirectory + "/copilotUsage/get-copilot-usage-wrapper"
 
     popoutWidth:  400
     popoutHeight: 580
@@ -121,11 +122,12 @@ PluginComponent {
         // Strip WORK_ prefix
         if (key.startsWith("WORK_")) key = key.substring(5)
         switch (key) {
-        case "ERROR":        workError       = true; break
-        case "GITHUB_USER":  workUser        = val; break
-        case "GITHUB_NAME":  workName        = val; break
-        case "PLAN_TYPE":    workPlanType    = val; break
-        case "PREMIUM_USED": workPremiumUsed = parseInt(val) || 0; break
+        case "ERROR":             workError       = true; break
+        case "GITHUB_USER":       workUser        = val; break
+        case "GITHUB_NAME":       workName        = val; break
+        case "PLAN_TYPE":         workPlanType    = val; break
+        case "PREMIUM_USED":      workPremiumUsed = parseInt(val) || 0; break
+        case "PREMIUM_REMAINING": workPremiumUsed = parseFloat(val) || 0; break  // Used as remaining % when limit is 100
         }
     }
 
@@ -263,8 +265,8 @@ PluginComponent {
 
     popoutContent: Component {
         PopoutComponent {
-            headerText: "GitHub Copilot"
-            detailsText: root.githubUser ? "@" + root.githubUser : ""
+            headerText: root.workConfigured && root.workUser ? "GitHub Copilot (Work)" : "GitHub Copilot"
+            detailsText: root.workConfigured && root.workUser ? "@" + root.workUser : (root.githubUser ? "@" + root.githubUser : "")
             showCloseButton: true
 
             Column {
@@ -272,10 +274,10 @@ PluginComponent {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: Theme.spacingL
 
-                // ── Personal account ─────────────────────────────────────────
+                // ── Personal/GitHub account ─────────────────────────────────────────
 
                 StyledText {
-                    text: "Personal"
+                    text: "GitHub Account"
                     font.pixelSize: Theme.fontSizeSmall
                     font.weight: Font.Medium
                     color: Theme.surfaceVariantText
@@ -465,7 +467,9 @@ PluginComponent {
                                 anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spacingS
                                 StyledText { text: "Premium Requests"; font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium; color: Theme.surfaceText }
                                 StyledText {
-                                    text: root.workPremiumUsed + " / " + root.workPremiumLimit + " used"
+                                    text: root.workPremiumLimit === 100 
+                                        ? root.workPremiumUsed.toFixed(1) + "% used"
+                                        : root.workPremiumUsed + " / " + root.workPremiumLimit + " used"
                                     font.pixelSize: Theme.fontSizeSmall
                                     color: root.rateColor(root.workPremiumPct)
                                 }

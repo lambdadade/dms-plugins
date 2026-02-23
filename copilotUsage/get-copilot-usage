@@ -44,9 +44,16 @@ out PLAN_TYPE   "$PLAN_TYPE"
 out GITHUB_USER "$GITHUB_USER"
 out GITHUB_NAME "$GITHUB_NAME"
 
-# ── Premium requests (business / enterprise) ───────────────────────────────────
+# ── Premium requests (business / enterprise) ───────────────────────────────
+# GitHub API endpoints for premium requests may not be available for all account types.
+# As a fallback, we support reading from environment variable or hardcoded value.
+#
+# To use: set COPILOT_PREMIUM_REMAINING to your remaining percentage before running,
+# or hardcode it below after getting it from: copilot --prompt "show usage" 
 PREMIUM_USED=0
+PREMIUM_REMAINING=0
 
+# Try GitHub API first
 if [ "$PLAN_TYPE" = "business" ] || [ "$PLAN_TYPE" = "enterprise" ]; then
     PREM_JSON=$(gh api "/users/${GITHUB_USER}/settings/billing/premium_request/usage" 2>/dev/null || echo '{}')
     PREMIUM_USED=$(echo "$PREM_JSON" | jq -r '
@@ -54,7 +61,17 @@ if [ "$PLAN_TYPE" = "business" ] || [ "$PLAN_TYPE" = "enterprise" ]; then
     ' 2>/dev/null || echo "0")
 fi
 
+# If API didn't work, check environment variable as fallback
+if [ "$PREMIUM_USED" -eq 0 ] && [ -n "${COPILOT_PREMIUM_REMAINING:-}" ]; then
+    PREMIUM_REMAINING="${COPILOT_PREMIUM_REMAINING}"
+fi
+
 out PREMIUM_USED "${PREMIUM_USED:-0}"
+
+# Output remaining percentage for work accounts
+if [ -n "$PREFIX" ] && [ "$PREFIX" = "WORK" ]; then
+    out PREMIUM_REMAINING "${PREMIUM_REMAINING:-0}"
+fi
 
 # ── Personal-only: API rate limit + daily activity chart ───────────────────────
 if [ -z "$PREFIX" ]; then
