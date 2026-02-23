@@ -106,6 +106,14 @@ PluginSettings {
         defaultValue: false
     }
 
+    StringSetting {
+        settingKey: "todoKeywords"
+        label: "Todo Tab Keywords"
+        description: "Comma-separated TODO keywords to show in the Todo tab"
+        placeholder: "NEXT,TODO"
+        defaultValue: "NEXT,TODO"
+    }
+
     StyledRect { width: parent.width; height: 1; color: Theme.surfaceVariant }
 
     // ── Event notifications ───────────────────────────────────────────────

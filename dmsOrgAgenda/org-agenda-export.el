@@ -194,5 +194,78 @@ ORG-DIR: optional org-directory override (expands ~ automatically)."
      (message "org-agenda-export error: %s" (error-message-string err))
      (princ "[]"))))
 
+(defun org-todo-export-json (keywords-str &optional org-dir)
+  "Export org TODO items matching KEYWORDS-STR as JSON array to stdout.
+KEYWORDS-STR: space- or comma-separated list of TODO keywords (e.g. \"NEXT TODO\").
+ORG-DIR: optional org-directory override (expands ~ automatically)."
+  (condition-case err
+      (let* ((keywords (split-string (or keywords-str "NEXT TODO") "[, ]+" t))
+             (org-dir-expanded (when org-dir
+                                 (expand-file-name org-dir)))
+             (files (cond
+                     ((and org-dir-expanded (file-directory-p org-dir-expanded))
+                      (directory-files-recursively org-dir-expanded "\\.org$"))
+                     ((bound-and-true-p org-agenda-files)
+                      (org-agenda-files t))
+                     ((and (bound-and-true-p org-directory)
+                           (file-directory-p org-directory))
+                      (directory-files-recursively org-directory "\\.org$"))
+                     (t '())))
+             (results '()))
+
+        (dolist (file files)
+          (when (and (file-exists-p file) (file-readable-p file))
+            (condition-case file-err
+                (with-temp-buffer
+                  (insert-file-contents file)
+                  (org-mode)
+                  (org-map-entries
+                   (lambda ()
+                     (let* ((todo-state (org-get-todo-state)))
+                       (when (and todo-state (member todo-state keywords))
+                         (let* ((heading (org-get-heading t t t t))
+                                (tags-list (org-get-tags))
+                                (priority-char (org-entry-get nil "PRIORITY"))
+                                (category (or (org-get-category) ""))
+                                (scheduled-str (or (org-entry-get nil "SCHEDULED") ""))
+                                (deadline-str (or (org-entry-get nil "DEADLINE") "")))
+                           (push `((title . ,heading)
+                                   (todoState . ,todo-state)
+                                   (category . ,category)
+                                   (priority . ,(or priority-char ""))
+                                   (tags . ,(vconcat tags-list))
+                                   (file . ,file)
+                                   (scheduled . ,scheduled-str)
+                                   (deadline . ,deadline-str))
+                                 results)))))
+                   nil nil))
+              (error
+               (message "Warning: error processing %s: %s" file (error-message-string file-err))))))
+
+        ;; Sort by priority (A < B < C < "") then title
+        (setq results (sort results
+                            (lambda (a b)
+                              (let ((pa (or (cdr (assq 'priority a)) ""))
+                                    (pb (or (cdr (assq 'priority b)) ""))
+                                    (sa (or (cdr (assq 'todoState a)) ""))
+                                    (sb (or (cdr (assq 'todoState b)) ""))
+                                    (ta (or (cdr (assq 'title a)) ""))
+                                    (tb (or (cdr (assq 'title b)) "")))
+                                (cond
+                                 ((not (string= pa pb))
+                                  (cond ((string= pa "A") t)
+                                        ((string= pb "A") nil)
+                                        ((string= pa "B") t)
+                                        ((string= pb "B") nil)
+                                        (t (string< pa pb))))
+                                 ((not (string= sa sb)) (string< sa sb))
+                                 (t (string< ta tb)))))))
+
+        (princ (json-encode (vconcat results))))
+
+    (error
+     (message "org-todo-export error: %s" (error-message-string err))
+     (princ "[]"))))
+
 (provide 'org-agenda-export)
 ;;; org-agenda-export.el ends here

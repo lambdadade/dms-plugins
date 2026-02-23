@@ -21,6 +21,11 @@ PluginComponent {
     property string errorMessage: ""
     property int agendaRevision: 0
 
+    // ── Todo state ───────────────────────────────────────────────────────────
+    property var todoItems: []
+    property bool todoLoading: false
+    property int todoRevision: 0
+
     // ── Navigation state ────────────────────────────────────────────────────
     property date viewDate: new Date()
     property int viewSpan: 7  // 1 = day, 7 = week
@@ -45,6 +50,7 @@ PluginComponent {
     property bool notifyAt15Min: pluginData.notifyAt15Min ?? true
     property bool notifyAt30Min: pluginData.notifyAt30Min ?? false
     property bool notifyAt60Min: pluginData.notifyAt60Min ?? false
+    property string todoKeywords: pluginData.todoKeywords || "NEXT,TODO"
 
     // ── Derived properties ───────────────────────────────────────────────────
     readonly property var todayItems: {
@@ -110,6 +116,7 @@ PluginComponent {
     // ── Initialisation ───────────────────────────────────────────────────────
     Component.onCompleted: {
         refresh();
+        refreshTodo();
     }
 
     // ── Auto-refresh timer ───────────────────────────────────────────────────
@@ -118,7 +125,10 @@ PluginComponent {
         interval: root.refreshIntervalMinutes * 60 * 1000
         running: true
         repeat: true
-        onTriggered: root.refresh()
+        onTriggered: {
+            root.refresh();
+            root.refreshTodo();
+        }
     }
 
     // ── Notification check timer ─────────────────────────────────────────────
@@ -189,6 +199,52 @@ PluginComponent {
         }
     }
 
+    // ── Todo emacs process ───────────────────────────────────────────────────
+    Process {
+        id: todoProc
+        stdout: StdioCollector {}
+        stderr: StdioCollector {}
+
+        onExited: exitCode => {
+            todoTimeoutTimer.stop();
+            root.todoLoading = false;
+
+            if (exitCode !== 0) {
+                root.todoItems = [];
+                root.todoRevision++;
+                return;
+            }
+
+            try {
+                const output = String(stdout.text).trim();
+                if (!output || output === "[]" || output === "null") {
+                    root.todoItems = [];
+                } else {
+                    root.todoItems = JSON.parse(output);
+                }
+            } catch (e) {
+                root.todoItems = [];
+            }
+
+            root.todoRevision++;
+        }
+    }
+
+    // ── Todo timeout guard ───────────────────────────────────────────────────
+    Timer {
+        id: todoTimeoutTimer
+        interval: 30000
+        running: false
+        repeat: false
+        onTriggered: {
+            if (todoProc.running) {
+                todoProc.signal(15);
+                root.todoLoading = false;
+                root.todoRevision++;
+            }
+        }
+    }
+
     // ── Public functions ─────────────────────────────────────────────────────
     function refresh() {
         if (emacsProc.running) return;
@@ -214,6 +270,33 @@ PluginComponent {
         emacsProc.command = ["sh", "-c", cmd];
         emacsProc.running = true;
         timeoutTimer.start();
+    }
+
+    function refreshTodo() {
+        if (todoProc.running) return;
+
+        root.todoLoading = true;
+
+        const home = Quickshell.env("HOME");
+        const orgDir = root.orgDirectory.replace("~", home);
+
+        const elispUrl = Qt.resolvedUrl("./org-agenda-export.el").toString();
+        const elispPath = elispUrl.startsWith("file://") ? elispUrl.slice(7) : elispUrl;
+
+        // Convert comma-separated keywords to space-separated for elisp
+        const keywords = root.todoKeywords.split(",").map(k => k.trim()).join(" ");
+
+        var cmd = root.emacsCommand + " --batch";
+        if (root.emacsInitFile) {
+            const initPath = root.emacsInitFile.replace("~", home);
+            cmd += " -l '" + initPath + "'";
+        }
+        cmd += " -l '" + elispPath + "'";
+        cmd += " --eval '(org-todo-export-json \"" + keywords + "\" \"" + orgDir + "\")'";
+
+        todoProc.command = ["sh", "-c", cmd];
+        todoProc.running = true;
+        todoTimeoutTimer.start();
     }
 
     function checkNotifications() {
@@ -339,7 +422,9 @@ PluginComponent {
     // ── Cleanup ──────────────────────────────────────────────────────────────
     Component.onDestruction: {
         if (emacsProc.running) emacsProc.signal(15);
+        if (todoProc.running) todoProc.signal(15);
         timeoutTimer.stop();
+        todoTimeoutTimer.stop();
     }
 
     // ── IPC handler ──────────────────────────────────────────────────────────
@@ -348,6 +433,10 @@ PluginComponent {
 
         function refreshAgenda() {
             root.refresh();
+        }
+
+        function refreshTodo() {
+            root.refreshTodo();
         }
 
         function testNotification() {
@@ -444,8 +533,47 @@ PluginComponent {
                 width: parent.width
                 spacing: Theme.spacingS
 
-                // ── Navigation row ────────────────────────────────────────
+                property int activeTab: 0
+
+                // ── Tab bar ───────────────────────────────────────────────
+                Row {
+                    id: tabBar
+                    width: parent.width
+                    spacing: 2
+
+                    Repeater {
+                        model: ["Agenda", "Todo"]
+
+                        Rectangle {
+                            required property string modelData
+                            required property int index
+                            width: (tabBar.width - 2) / 2
+                            height: 32
+                            radius: Theme.cornerRadius
+                            color: panelRoot.activeTab === index
+                                ? Qt.rgba(Theme.primary.r, Theme.primary.g, Theme.primary.b, 0.2)
+                                : "transparent"
+
+                            StyledText {
+                                anchors.centerIn: parent
+                                text: modelData
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.weight: panelRoot.activeTab === index ? Font.DemiBold : Font.Normal
+                                color: panelRoot.activeTab === index ? Theme.primary : Theme.surfaceVariantText
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: panelRoot.activeTab = index
+                            }
+                        }
+                    }
+                }
+
+                // ── Navigation row (Agenda tab only) ──────────────────────
                 StyledRect {
+                    visible: panelRoot.activeTab === 0
                     width: parent.width
                     height: navRow.implicitHeight + Theme.spacingS * 2
                     radius: Theme.cornerRadius
@@ -528,7 +656,8 @@ PluginComponent {
                     id: agendaContent
                     width: parent.width
                     height: 500
-                    focus: true
+                    visible: panelRoot.activeTab === 0
+                    focus: panelRoot.activeTab === 0
 
                     property string searchText: ""
                     property int selectedGroupIndex: 0
@@ -574,12 +703,11 @@ PluginComponent {
                         }
                     }
                     Keys.onLeftPressed: {
-                        root.navigateDays(-root.viewSpan);
-                        resetSelection();
+                        // Already on leftmost (Agenda) tab — no-op
                     }
                     Keys.onRightPressed: {
-                        root.navigateDays(root.viewSpan);
-                        resetSelection();
+                        panelRoot.activeTab = 1;
+                        todoContent.resetSelection();
                     }
                     Keys.onEscapePressed: {
                         if (searchText !== "") {
@@ -703,6 +831,148 @@ PluginComponent {
                                             : root.hasError ? "Error: " + root.errorMessage
                                             : agendaContent.searchText ? "No matching items"
                                             : "No agenda items"
+                                        color: Theme.surfaceVariantText
+                                        wrapMode: Text.Wrap
+                                        width: 300
+                                        horizontalAlignment: Text.AlignHCenter
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Todo list (keyboard-navigable, searchable) ────────────
+                Item {
+                    id: todoContent
+                    width: parent.width
+                    height: 540
+                    visible: panelRoot.activeTab === 1
+                    focus: panelRoot.activeTab === 1
+
+                    property int selectedIndex: 0
+                    property string searchText: ""
+
+                    function resetSelection() {
+                        selectedIndex = 0;
+                        searchText = "";
+                    }
+
+                    readonly property var filteredTodos: {
+                        const rev = root.todoRevision;
+                        const items = root.todoItems;
+                        if (!searchText) return items;
+                        const lower = searchText.toLowerCase();
+                        return items.filter(item =>
+                            (item.title || "").toLowerCase().includes(lower) ||
+                            (item.category || "").toLowerCase().includes(lower) ||
+                            (item.todoState || "").toLowerCase().includes(lower)
+                        );
+                    }
+
+                    Keys.onUpPressed: {
+                        if (selectedIndex > 0) selectedIndex--;
+                    }
+                    Keys.onDownPressed: {
+                        if (selectedIndex < filteredTodos.length - 1) selectedIndex++;
+                    }
+                    Keys.onLeftPressed: {
+                        panelRoot.activeTab = 0;
+                        agendaContent.resetSelection();
+                    }
+                    Keys.onRightPressed: {
+                        // Already on rightmost (Todo) tab — no-op
+                    }
+                    Keys.onEscapePressed: {
+                        if (searchText !== "") {
+                            searchText = "";
+                            selectedIndex = 0;
+                        }
+                    }
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Backspace) {
+                            if (searchText.length > 0) {
+                                searchText = searchText.slice(0, -1);
+                                selectedIndex = 0;
+                            }
+                            event.accepted = true;
+                        } else if (event.text && event.text.length === 1 &&
+                                   !(event.modifiers & Qt.ControlModifier) &&
+                                   !(event.modifiers & Qt.AltModifier)) {
+                            searchText += event.text;
+                            selectedIndex = 0;
+                            event.accepted = true;
+                        }
+                    }
+
+                    Flickable {
+                        id: todoFlickable
+                        anchors.fill: parent
+                        contentHeight: todoColumn.implicitHeight
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        Column {
+                            id: todoColumn
+                            width: todoFlickable.width
+                            spacing: Theme.spacingXS
+
+                            // Search indicator
+                            StyledRect {
+                                visible: todoContent.searchText !== ""
+                                width: todoColumn.width
+                                height: 28
+                                radius: Theme.cornerRadius
+                                color: Theme.surfaceContainerHigh
+
+                                StyledText {
+                                    anchors.centerIn: parent
+                                    text: "🔍 " + todoContent.searchText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    color: Theme.primary
+                                }
+                            }
+
+                            Repeater {
+                                model: todoContent.filteredTodos
+
+                                OrgTodoItem {
+                                    required property var modelData
+                                    required property int index
+                                    width: todoColumn.width
+                                    item: modelData
+                                    selected: todoContent.selectedIndex === index
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: todoContent.selectedIndex = index
+                                    }
+                                }
+                            }
+
+                            // Empty state
+                            Item {
+                                visible: todoContent.filteredTodos.length === 0
+                                width: todoFlickable.width
+                                height: 200
+
+                                Column {
+                                    anchors.centerIn: parent
+                                    spacing: Theme.spacingM
+
+                                    DankIcon {
+                                        name: "check_circle"
+                                        size: 36
+                                        color: Theme.surfaceVariantText
+                                        opacity: 0.5
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                    }
+
+                                    StyledText {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: root.todoLoading ? "Loading…"
+                                            : todoContent.searchText ? "No matching items"
+                                            : "No TODO items"
                                         color: Theme.surfaceVariantText
                                         wrapMode: Text.Wrap
                                         width: 300
