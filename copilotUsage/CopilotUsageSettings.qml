@@ -17,7 +17,7 @@ PluginSettings {
 
     StyledText {
         width: parent.width
-        text: "Requires the gh CLI authenticated with your personal account (gh auth login). Shows your Copilot plan, GitHub API rate limit usage, and a 7-day public-activity chart."
+        text: "Requires gh CLI authenticated with your GitHub account(s)."
         font.pixelSize: Theme.fontSizeSmall
         color: Theme.surfaceVariantText
         wrapMode: Text.WordWrap
@@ -32,5 +32,29 @@ PluginSettings {
         maximum: 3600
         unit: "s"
         leftIcon: "schedule"
+    }
+
+    StyledText {
+        width: parent.width
+        text: "Work Account (Copilot Business / Enterprise)"
+        font.pixelSize: Theme.fontSizeMedium
+        font.weight: Font.Medium
+        color: Theme.surfaceText
+    }
+
+    StringSetting {
+        settingKey: "workGhUser"
+        label: "Work gh CLI Username"
+        description: "gh CLI username for your work account (gh auth login → gh auth status to find it). Leave blank to disable."
+        placeholder: "marc-seibert_uics"
+        defaultValue: ""
+    }
+
+    StringSetting {
+        settingKey: "workPremiumLimit"
+        label: "Monthly Premium Request Limit"
+        description: "Your Copilot Business/Enterprise monthly premium request quota. Default is 300."
+        placeholder: "300"
+        defaultValue: "300"
     }
 }

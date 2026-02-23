@@ -1,27 +1,35 @@
 #!/usr/bin/env bash
 set -eu
 
-TODAY=$(date +%Y-%m-%d)
-SEVEN_DAYS_AGO=$(date -d "6 days ago" +%Y-%m-%d)
+# Usage: get-copilot-usage [--user <gh_cli_user>] [--prefix <PREFIX>]
+#   --user    gh CLI username to use (from keyring via `gh auth token --user`)
+#   --prefix  output key prefix, e.g. "WORK" → WORK_PLAN_TYPE, WORK_GITHUB_USER, …
+#
+# Without --prefix: personal mode — outputs rate limit + daily activity chart too
+# With    --prefix: work mode    — outputs plan + premium requests only
 
-# Defaults
-PLAN_TYPE="unknown"
-GITHUB_USER="unknown"
-GITHUB_NAME=""
-RATE_USED=0
-RATE_LIMIT=5000
-RATE_UTIL=0
-RATE_RESET=""
-GRAPHQL_USED=0
-GRAPHQL_LIMIT=5000
+GH_USER_ARG=""
+PREFIX=""
 
-# Rolling 7-day dates for the activity chart (index 1 = 6 days ago, 7 = today)
-DAY_DATES=""
-for i in 6 5 4 3 2 1 0; do
-    d=$(date -d "${i} days ago" +%Y-%m-%d)
-    DAY_DATES="${DAY_DATES:+${DAY_DATES},}${d}"
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --user)   GH_USER_ARG="$2"; shift 2 ;;
+        --prefix) PREFIX="$2";      shift 2 ;;
+        *)        shift ;;
+    esac
 done
-DAILY_EVENTS="0,0,0,0,0,0,0"
+
+# ── Auth ───────────────────────────────────────────────────────────────────────
+if [ -n "$GH_USER_ARG" ]; then
+    GH_TOKEN_VAL=$(gh auth token --user "$GH_USER_ARG" 2>/dev/null || echo "")
+    if [ -z "$GH_TOKEN_VAL" ]; then
+        echo "${PREFIX:+${PREFIX}_}ERROR=not_authenticated"
+        exit 0
+    fi
+    export GH_TOKEN="$GH_TOKEN_VAL"
+fi
+
+out() { echo "${PREFIX:+${PREFIX}_}${1}=${2}"; }
 
 # ── GitHub user ────────────────────────────────────────────────────────────────
 USER_JSON=$(gh api /user 2>/dev/null || echo '{}')
@@ -32,63 +40,67 @@ GITHUB_NAME=$(echo "$USER_JSON" | jq -r '.name // ""')
 BILLING=$(gh api /user/copilot_billing 2>/dev/null || echo '{}')
 PLAN_TYPE=$(echo "$BILLING" | jq -r '.plan_type // "unknown"')
 
-# ── API rate limit ─────────────────────────────────────────────────────────────
-RATE_JSON=$(gh api /rate_limit 2>/dev/null || echo '{}')
-RATE_USED=$(echo "$RATE_JSON"    | jq -r '.rate.used    // 0')
-RATE_LIMIT=$(echo "$RATE_JSON"   | jq -r '.rate.limit   // 5000')
-RATE_RESET=$(echo "$RATE_JSON"   | jq -r '.rate.reset   // 0')
-GRAPHQL_USED=$(echo "$RATE_JSON" | jq -r '.resources.graphql.used  // 0')
-GRAPHQL_LIMIT=$(echo "$RATE_JSON"| jq -r '.resources.graphql.limit // 5000')
+out PLAN_TYPE   "$PLAN_TYPE"
+out GITHUB_USER "$GITHUB_USER"
+out GITHUB_NAME "$GITHUB_NAME"
 
-# Convert epoch reset time to ISO-8601 for QML
-RATE_RESET_ISO=$(date -d "@${RATE_RESET}" --iso-8601=seconds 2>/dev/null || echo "")
+# ── Premium requests (business / enterprise) ───────────────────────────────────
+PREMIUM_USED=0
 
-if [ "$RATE_LIMIT" -gt 0 ]; then
-    RATE_UTIL=$(awk "BEGIN { printf \"%.1f\", ${RATE_USED} * 100 / ${RATE_LIMIT} }")
+if [ "$PLAN_TYPE" = "business" ] || [ "$PLAN_TYPE" = "enterprise" ]; then
+    PREM_JSON=$(gh api "/users/${GITHUB_USER}/settings/billing/premium_request/usage" 2>/dev/null || echo '{}')
+    PREMIUM_USED=$(echo "$PREM_JSON" | jq -r '
+        [.usageItems[]? | select(.sku == "Copilot Premium Request") | .netQuantity // 0] | add // 0
+    ' 2>/dev/null || echo "0")
 fi
 
-# ── GitHub activity: event count per day (public events, last 7 days) ──────────
-# Uses the events API — lightweight, no special scopes needed.
-EVENTS=$(gh api "/users/${GITHUB_USER}/events?per_page=100" 2>/dev/null || echo '[]')
+out PREMIUM_USED "${PREMIUM_USED:-0}"
 
-if [ "$(echo "$EVENTS" | jq 'length')" -gt 0 ]; then
-    DAILY_EVENTS=$(echo "$EVENTS" | jq -r '[.[] | .created_at[:10]] | group_by(.) | map({(.[0]): length}) | add' \
-        2>/dev/null | \
-    awk -v day_dates="$DAY_DATES" '
-    BEGIN { n = split(day_dates, dates, ",") }
-    { gsub(/[{}",:]/, " "); for (i = 1; i <= NF; i++) { key = $i; getline val < "/dev/null"; if (i % 2 == 1) cur_key = $i; else data[cur_key] = $i } }
-    END {
-        result = ""
-        for (i = 1; i <= n; i++) {
-            val = (dates[i] in data) ? data[dates[i]] : 0
-            result = result (i > 1 ? "," : "") val
-        }
-        print result
-    }' 2>/dev/null || echo "0,0,0,0,0,0,0")
+# ── Personal-only: API rate limit + daily activity chart ───────────────────────
+if [ -z "$PREFIX" ]; then
+    RATE_USED=0; RATE_LIMIT=5000; RATE_UTIL=0; RATE_RESET_ISO=""; GRAPHQL_USED=0; GRAPHQL_LIMIT=5000
 
-    # Simpler awk: parse jq output line by line
-    DAILY_EVENTS=$(echo "$EVENTS" | jq -r '.[].created_at[:10]' 2>/dev/null | \
-    awk -v day_dates="$DAY_DATES" '
-    BEGIN { n = split(day_dates, dates, ",") }
-    { count[$1]++ }
-    END {
-        result = ""
-        for (i = 1; i <= n; i++) {
-            val = (dates[i] in count) ? count[dates[i]] : 0
-            result = result (i > 1 ? "," : "") val
-        }
-        print result
-    }')
+    RATE_JSON=$(gh api /rate_limit 2>/dev/null || echo '{}')
+    RATE_USED=$(echo "$RATE_JSON"     | jq -r '.rate.used                // 0')
+    RATE_LIMIT=$(echo "$RATE_JSON"    | jq -r '.rate.limit               // 5000')
+    RATE_RESET=$(echo "$RATE_JSON"    | jq -r '.rate.reset               // 0')
+    GRAPHQL_USED=$(echo "$RATE_JSON"  | jq -r '.resources.graphql.used   // 0')
+    GRAPHQL_LIMIT=$(echo "$RATE_JSON" | jq -r '.resources.graphql.limit  // 5000')
+    RATE_RESET_ISO=$(date -d "@${RATE_RESET}" --iso-8601=seconds 2>/dev/null || echo "")
+
+    if [ "$RATE_LIMIT" -gt 0 ]; then
+        RATE_UTIL=$(awk "BEGIN { printf \"%.1f\", ${RATE_USED} * 100 / ${RATE_LIMIT} }")
+    fi
+
+    echo "RATE_USED=${RATE_USED}"
+    echo "RATE_LIMIT=${RATE_LIMIT}"
+    echo "RATE_UTIL=${RATE_UTIL}"
+    echo "RATE_RESET=${RATE_RESET_ISO}"
+    echo "GRAPHQL_USED=${GRAPHQL_USED}"
+    echo "GRAPHQL_LIMIT=${GRAPHQL_LIMIT}"
+
+    DAY_DATES=""
+    for i in 6 5 4 3 2 1 0; do
+        d=$(date -d "${i} days ago" +%Y-%m-%d)
+        DAY_DATES="${DAY_DATES:+${DAY_DATES},}${d}"
+    done
+    DAILY_EVENTS="0,0,0,0,0,0,0"
+
+    EVENTS=$(gh api "/users/${GITHUB_USER}/events?per_page=100" 2>/dev/null || echo '[]')
+    if [ "$(echo "$EVENTS" | jq 'length')" -gt 0 ]; then
+        DAILY_EVENTS=$(echo "$EVENTS" | jq -r '.[].created_at[:10]' 2>/dev/null | \
+        awk -v day_dates="$DAY_DATES" '
+        BEGIN { n = split(day_dates, dates, ",") }
+        { count[$1]++ }
+        END {
+            result = ""
+            for (i = 1; i <= n; i++) {
+                val = (dates[i] in count) ? count[dates[i]] : 0
+                result = result (i > 1 ? "," : "") val
+            }
+            print result
+        }')
+    fi
+
+    echo "DAILY_EVENTS=${DAILY_EVENTS}"
 fi
-
-# ── Output key=value pairs ─────────────────────────────────────────────────────
-echo "PLAN_TYPE=${PLAN_TYPE}"
-echo "GITHUB_USER=${GITHUB_USER}"
-echo "GITHUB_NAME=${GITHUB_NAME}"
-echo "RATE_USED=${RATE_USED}"
-echo "RATE_LIMIT=${RATE_LIMIT}"
-echo "RATE_UTIL=${RATE_UTIL}"
-echo "RATE_RESET=${RATE_RESET_ISO}"
-echo "GRAPHQL_USED=${GRAPHQL_USED}"
-echo "GRAPHQL_LIMIT=${GRAPHQL_LIMIT}"
-echo "DAILY_EVENTS=${DAILY_EVENTS}"
