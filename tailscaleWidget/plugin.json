@@ -1,0 +1,17 @@
+{
+    "id": "tailscaleWidget",
+    "name": "Tailscale",
+    "description": "Monitor Tailscale VPN status and peer connectivity. Toggle up/down from the popout.",
+    "version": "1.0.0",
+    "author": "local",
+    "icon": "vpn_lock",
+    "type": "widget",
+    "capabilities": ["dankbar-widget"],
+    "component": "./TailscaleWidget.qml",
+    "settings": "./TailscaleSettings.qml",
+    "requires": ["tailscale"],
+    "permissions": [
+        "settings_read",
+        "settings_write"
+    ]
+}
