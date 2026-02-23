@@ -917,6 +917,13 @@ PluginComponent {
                     Keys.onRightPressed: {
                         // Already on rightmost (Todo) tab — no-op
                     }
+                    Keys.onReturnPressed: {
+                        const item = filteredTodos[selectedIndex];
+                        if (item && item.file && item.line) {
+                            Quickshell.execDetached(["emacsclient", "-n",
+                                "+" + item.line, item.file]);
+                        }
+                    }
                     Keys.onEscapePressed: {
                         if (searchText !== "") {
                             searchText = "";
@@ -929,6 +936,12 @@ PluginComponent {
                                 searchText = searchText.slice(0, -1);
                                 selectedIndex = 0;
                             }
+                            event.accepted = true;
+                        } else if ((event.text === "c" || event.text === "C") &&
+                                   searchText === "" &&
+                                   !(event.modifiers & Qt.ControlModifier)) {
+                            Quickshell.execDetached(["emacsclient", "-c",
+                                "--eval", "(org-capture)"]);
                             event.accepted = true;
                         } else if (event.text && event.text.length === 1 &&
                                    !(event.modifiers & Qt.ControlModifier) &&
