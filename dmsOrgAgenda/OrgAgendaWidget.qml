@@ -212,15 +212,16 @@ PluginComponent {
             if (exitCode !== 0) {
                 root.todoItems = [];
                 root.todoRevision++;
+                ToastService.showError("Org Todo", "exit " + exitCode + ": " + String(stderr.text).trim().slice(0, 100));
                 return;
             }
 
             try {
                 const output = String(stdout.text).trim();
-                if (!output || output === "[]" || output === "null") {
-                    root.todoItems = [];
-                } else {
+                if (output && output !== "[]" && output !== "null") {
                     root.todoItems = JSON.parse(output);
+                } else {
+                    root.todoItems = [];
                 }
             } catch (e) {
                 root.todoItems = [];

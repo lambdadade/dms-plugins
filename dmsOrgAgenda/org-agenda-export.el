@@ -200,6 +200,10 @@ KEYWORDS-STR: space- or comma-separated list of TODO keywords (e.g. \"NEXT TODO\
 ORG-DIR: optional org-directory override (expands ~ automatically)."
   (condition-case err
       (let* ((keywords (split-string (or keywords-str "NEXT TODO") "[, ]+" t))
+             ;; In batch mode org-todo-keywords only includes TODO/DONE by default.
+             ;; Dynamically bind it so org-get-todo-state recognises our keywords
+             ;; even in files without a #+TODO: header.
+             (org-todo-keywords (list (append '(sequence) keywords '("|" "DONE" "CANCELLED"))))
              (org-dir-expanded (when org-dir
                                  (expand-file-name org-dir)))
              (files (cond
