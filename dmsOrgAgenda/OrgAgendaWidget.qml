@@ -26,6 +26,13 @@ PluginComponent {
     property bool todoLoading: false
     property int todoRevision: 0
 
+    // Pending-retry flags: pluginId/pluginService are injected after
+    // Component.onCompleted, so the first refresh() runs with wrong defaults.
+    // When pluginData loads with real values, we flag a retry and execute it
+    // as soon as the in-progress (wrong) process finishes.
+    property bool _pendingRefresh: false
+    property bool _pendingTodoRefresh: false
+
     // ── Navigation state ────────────────────────────────────────────────────
     property date viewDate: new Date()
     property int viewSpan: 7  // 1 = day, 7 = week
@@ -119,13 +126,13 @@ PluginComponent {
         refreshTodo();
     }
 
-    // pluginData (and therefore orgDirectory) loads asynchronously after
-    // Component.onCompleted — re-run refresh when it arrives.
+    // pluginData loads after Component.onCompleted (pluginId/pluginService are
+    // injected by the Loader's onLoaded handler). When real data arrives, queue
+    // a retry; the retry fires as soon as the in-progress process exits.
     onPluginDataChanged: {
-        Qt.callLater(() => {
-            if (!loading) refresh();
-            if (!todoLoading) refreshTodo();
-        });
+        if (!pluginData.orgDirectory) return; // skip the initial empty-object event
+        if (emacsProc.running) _pendingRefresh = true; else refresh();
+        if (todoProc.running)  _pendingTodoRefresh = true; else refreshTodo();
     }
 
     // ── Auto-refresh timer ───────────────────────────────────────────────────
@@ -188,6 +195,11 @@ PluginComponent {
 
             root.agendaRevision++;
             root.checkNotifications();
+
+            if (root._pendingRefresh) {
+                root._pendingRefresh = false;
+                Qt.callLater(root.refresh);
+            }
         }
     }
 
@@ -237,6 +249,11 @@ PluginComponent {
             }
 
             root.todoRevision++;
+
+            if (root._pendingTodoRefresh) {
+                root._pendingTodoRefresh = false;
+                Qt.callLater(root.refreshTodo);
+            }
         }
     }
 
