@@ -119,6 +119,15 @@ PluginComponent {
         refreshTodo();
     }
 
+    // pluginData (and therefore orgDirectory) loads asynchronously after
+    // Component.onCompleted — re-run refresh when it arrives.
+    onPluginDataChanged: {
+        Qt.callLater(() => {
+            if (!loading) refresh();
+            if (!todoLoading) refreshTodo();
+        });
+    }
+
     // ── Auto-refresh timer ───────────────────────────────────────────────────
     Timer {
         id: refreshTimer
@@ -536,6 +545,15 @@ PluginComponent {
 
                 property int activeTab: 0
 
+                // Forward focus to the active tab's content item whenever the
+                // tab changes (key events only reach items with activeFocus).
+                onActiveTabChanged: Qt.callLater(() => {
+                    if (activeTab === 0) agendaContent.forceActiveFocus();
+                    else todoContent.forceActiveFocus();
+                })
+
+                Component.onCompleted: Qt.callLater(() => agendaContent.forceActiveFocus())
+
                 // ── Tab bar ───────────────────────────────────────────────
                 Row {
                     id: tabBar
@@ -658,7 +676,6 @@ PluginComponent {
                     width: parent.width
                     height: 500
                     visible: panelRoot.activeTab === 0
-                    focus: panelRoot.activeTab === 0
 
                     property string searchText: ""
                     property int selectedGroupIndex: 0
@@ -849,7 +866,6 @@ PluginComponent {
                     width: parent.width
                     height: 540
                     visible: panelRoot.activeTab === 1
-                    focus: panelRoot.activeTab === 1
 
                     property int selectedIndex: 0
                     property string searchText: ""
