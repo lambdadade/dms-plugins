@@ -922,6 +922,7 @@ PluginComponent {
                         if (item && item.file && item.line) {
                             Quickshell.execDetached(["emacsclient", "-n",
                                 "+" + item.line, item.file]);
+                            if (popout.closePopout) popout.closePopout();
                         }
                     }
                     Keys.onEscapePressed: {
@@ -937,9 +938,8 @@ PluginComponent {
                                 selectedIndex = 0;
                             }
                             event.accepted = true;
-                        } else if ((event.text === "c" || event.text === "C") &&
-                                   searchText === "" &&
-                                   !(event.modifiers & Qt.ControlModifier)) {
+                        } else if (event.key === Qt.Key_C &&
+                                   (event.modifiers & Qt.ControlModifier)) {
                             Quickshell.execDetached(["emacsclient", "-c",
                                 "--eval", "(org-capture)"]);
                             event.accepted = true;
