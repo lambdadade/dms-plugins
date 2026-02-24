@@ -181,9 +181,9 @@ QtObject {
                 "  'Type Password')  sleep 0.5 && _t=$(rbw get --field password '" + id + "' | tr -d '\\n') && ydotool type --clearmodifiers --delay=12 -- \"$_t\" ;;",
                 "  'Type Username')  sleep 0.5 && _t=$(rbw get --field username '" + id + "' | tr -d '\\n') && ydotool type --clearmodifiers --delay=12 -- \"$_t\" ;;",
                 "  'Type TOTP')      sleep 0.5 && _t=$(rbw get --field totp    '" + id + "' | tr -d '\\n') && ydotool type --clearmodifiers --delay=12 -- \"$_t\" ;;",
-                "  'Copy Password')  rbw get --field password '" + id + "' | dms cl copy ;;",
-                "  'Copy Username')  rbw get --field username '" + id + "' | dms cl copy ;;",
-                "  'Copy TOTP')      rbw get --field totp    '" + id + "' | dms cl copy ;;",
+                "  'Copy Password')  rbw get --field password '" + id + "' | dms cl copy && sleep 45 && echo -n | wl-copy ;;",
+                "  'Copy Username')  rbw get --field username '" + id + "' | dms cl copy && sleep 45 && echo -n | wl-copy ;;",
+                "  'Copy TOTP')      rbw get --field totp    '" + id + "' | dms cl copy && sleep 45 && echo -n | wl-copy ;;",
                 "esac"
             ].join("\n");
         } else {
@@ -255,9 +255,9 @@ QtObject {
         const label = item._name || item.name;
         if (item._source === "bw") {
             Quickshell.execDetached(["sh", "-c",
-                "rbw get --field " + field + " '" + item._id + "' | dms cl copy"
+                "rbw get --field " + field + " '" + item._id + "' | dms cl copy && sleep 45 && echo -n | wl-copy"
             ]);
-            ToastService.showInfo("Passwords", "Copied " + field + " of " + label);
+            ToastService.showInfo("Passwords", "Copied " + field + " of " + label + " · clears in 45s");
         } else {
             if (field === "password") {
                 Quickshell.execDetached(["pass", "-c", item._entry]);
