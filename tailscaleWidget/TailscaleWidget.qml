@@ -9,6 +9,8 @@ import qs.Modules.Plugins
 PluginComponent {
     id: root
 
+    property var popoutService: null
+
     // ── State ─────────────────────────────────────────────────────────────────
     property string backendState: "NoState"
     property string selfHostName: ""
@@ -248,6 +250,13 @@ PluginComponent {
                             }
                         }
                     }
+                }
+
+                DankButton {
+                    width: parent.width
+                    text: "Settings"
+                    iconName: "settings"
+                    onClicked: root.popoutService?.openSettingsWithTab("plugins")
                 }
             }
         }

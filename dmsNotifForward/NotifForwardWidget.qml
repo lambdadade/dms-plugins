@@ -9,6 +9,8 @@ import qs.Modules.Plugins
 PluginComponent {
     id: root
 
+    property var popoutService: null
+
     // Volatile runtime flag - resets to false on every DMS start
     property bool forwardingEnabled: false
 
@@ -211,6 +213,13 @@ PluginComponent {
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.surfaceVariantText
                     wrapMode: Text.WordWrap
+                }
+
+                DankButton {
+                    width: parent.width
+                    text: "Settings"
+                    iconName: "settings"
+                    onClicked: root.popoutService?.openSettingsWithTab("plugins")
                 }
             }
         }

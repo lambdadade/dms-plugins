@@ -10,6 +10,8 @@ import qs.Modules.Plugins
 PluginComponent {
     id: root
 
+    property var popoutService: null
+
     // ── Popout size ─────────────────────────────────────────────────────────
     popoutWidth: 560
     popoutHeight: 700
@@ -1070,6 +1072,13 @@ PluginComponent {
                                     "--eval", "(org-capture)"]);
                                 if (popout.closePopout) popout.closePopout();
                             }
+                        }
+
+                        DankButton {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "Settings"
+                            iconName: "settings"
+                            onClicked: root.popoutService?.openSettingsWithTab("plugins")
                         }
                     }
                 }

@@ -9,6 +9,8 @@ import qs.Modules.Plugins
 PluginComponent {
     id: root
 
+    property var popoutService: null
+
     // ── Settings ─────────────────────────────────────────────────────────────
     property int refreshInterval: (pluginData.refreshInterval || 300) * 1000
     property string workGhUser:     pluginData.workGhUser || ""
@@ -482,6 +484,13 @@ PluginComponent {
                             }
                         }
                     }
+                }
+
+                DankButton {
+                    width: parent.width
+                    text: "Settings"
+                    iconName: "settings"
+                    onClicked: root.popoutService?.openSettingsWithTab("plugins")
                 }
             }
         }
