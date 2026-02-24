@@ -1,0 +1,14 @@
+{
+  "id": "dmsPasswords",
+  "name": "Passwords",
+  "description": "Combined Bitwarden (rbw) + Password Store (pass) launcher with fuzzel field picker",
+  "version": "1.0.0",
+  "author": "masei",
+  "icon": "shield_lock",
+  "type": "launcher",
+  "capabilities": ["launcher"],
+  "component": "./PasswordsLauncher.qml",
+  "settings": "./PasswordsSettings.qml",
+  "trigger": "pw",
+  "permissions": ["settings_read", "settings_write"]
+}
